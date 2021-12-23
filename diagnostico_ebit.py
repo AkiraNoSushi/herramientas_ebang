@@ -1,8 +1,11 @@
 # config
 
 theoretical_hashrate = 9000 # GHs
-threshold = theoretical_hashrate-(theoretical_hashrate*0.4) # -40%
+theoretical_rpm = 6000 # RPM
 connection_timeout = 5.0 # 5 secs
+
+hashrate_threshold = theoretical_hashrate-(theoretical_hashrate*0.4) # -40%
+rpm_threshold = theoretical_rpm-(theoretical_rpm*0.15) # -15%
 
 import multiprocessing
 import ipaddress
@@ -72,7 +75,8 @@ if __name__ == "__main__":
          farm_temps = []
          for result in pool.imap(worker, range(int(start_ip), int(end_ip)+1)):
             if result["available"]:
-               if result["hashrate"] < threshold:
+               if (result["hashrate"] < hashrate_threshold
+                     or any(rpm < rpm_threshold for rpm in result["fans_speed"])):
                   if error == 0:
                      print("MINERS FALLANDO:")
                      print()
