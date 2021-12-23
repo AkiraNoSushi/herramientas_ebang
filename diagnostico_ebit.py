@@ -9,6 +9,7 @@ import ipaddress
 import requests
 import sys
 import json
+import statistics
 
 # disable self-signed certificate warning
 import urllib3
@@ -30,30 +31,28 @@ def worker(ip):
             "get_password": ""
          })
       except requests.RequestException:
-         result = (False, {
+         result = {
             "ip": ip,
             "available": False
-         })
+         }
       else:
          operation_info = json.loads(session.post(f"https://{ip}/alarm/GetAlarmLoop").text)
-         if operation_info["feedback"]["calValue"] < threshold:
-            system_status = json.loads(session.post(f"http://{ip}/Status/getsystemstatus").text)
-            result = (False, {
-               "ip": ip,
-               "available": True,
-               "hashrate": operation_info["feedback"]["calValue"],
-               "hashboards_temp": [
-                  system_status["feedback"]["device1temp"],
-                  system_status["feedback"]["device2temp"],
-                  system_status["feedback"]["device3temp"]
-               ],
-               "fans_speed": [
-                  system_status["feedback"]["devicefan"],
-                  system_status["feedback"]["devicefan2"],
-               ]
-            })
-         else:
-            result = (True, {})
+         system_status = json.loads(session.post(f"http://{ip}/Status/getsystemstatus").text)
+         result = {
+            "ip": ip,
+            "available": True,
+            "hashrate": operation_info["feedback"]["calValue"],
+            "median_temp": operation_info["feedback"]["tmpValue"],
+            "hashboards_temp": [
+               system_status["feedback"]["device1temp"],
+               system_status["feedback"]["device2temp"],
+               system_status["feedback"]["device3temp"]
+            ],
+            "fans_speed": [
+               system_status["feedback"]["devicefan"],
+               system_status["feedback"]["devicefan2"],
+            ]
+         }
       finally:
          session.close()
       return result
@@ -70,27 +69,32 @@ if __name__ == "__main__":
          total = int(end_ip)-int(start_ip)+1
          error = 0
          unavailable = 0
+         farm_temps = []
          for result in pool.imap(worker, range(int(start_ip), int(end_ip)+1)):
-            if not result[0]:
-               if error == 0:
-                  print("MINERS FALLANDO:")
-                  print()
-               print(f"IP: {result[1]['ip']}")
-               if result[1]["available"]:
-                  print(f"├ Hashrate: {result[1]['hashrate']}")
+            if result["available"]:
+               if result["hashrate"] < threshold:
+                  if error == 0:
+                     print("MINERS FALLANDO:")
+                     print()
+                  print(f"IP: {result['ip']}")
+                  print(f"├ Hashrate: {result['hashrate']}")
                   print(f"├ Temperaturas:")
-                  for index, temps in enumerate(result[1]["hashboards_temp"]):
-                     print(f"├ {'└' if len(result[1]['hashboards_temp'])==index+1 else '├'} Board {index+1}: {temps} (ºC)")
+                  for index, temps in enumerate(result["hashboards_temp"]):
+                     print(f"├ {'└' if len(result['hashboards_temp'])==index+1 else '├'} Board {index+1}: {temps} (ºC)")
                   print(f"└ Ventiladores:")
-                  for index, rpm in enumerate(result[1]["fans_speed"]):
-                     print(f"  {'└' if len(result[1]['fans_speed'])==index+1 else '├'} Ventilador {index+1}: {rpm} RPM")
-               else:
-                  print("NO DISPONIBLE")
-                  unavailable += 1
+                  for index, rpm in enumerate(result["fans_speed"]):
+                     print(f"  {'└' if len(result['fans_speed'])==index+1 else '├'} Ventilador {index+1}: {rpm} RPM")
+                  print()
+                  error += 1
+               farm_temps.append(result["median_temp"])
+            else:
+               print(f"IP: {result['ip']}")
+               print("NO DISPONIBLE")
                print()
-               error += 1
+               unavailable += 1
          print(f"Total de miners: {total}")
          print(f"Miners fallando: {error} ({round((error/total)*100, 2)}%)")
          print(f"Miners no disponibles: {unavailable} ({round((unavailable/total)*100, 2)}%)")
+         print(f"Temperatura de la granja: {statistics.median(farm_temps)} ºC")
    except KeyboardInterrupt:
       pass
