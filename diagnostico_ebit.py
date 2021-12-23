@@ -78,9 +78,6 @@ if __name__ == "__main__":
             if result["available"]:
                if (result["hashrate"] < hashrate_threshold
                      or any(rpm < rpm_threshold for rpm in result["fans_speed"])):
-                  if error == 0:
-                     print("MINERS FALLANDO:")
-                     print()
                   print(f"IP: {result['ip']}")
                   print(f"├ Hashrate: {result['hashrate']}")
                   print(f"├ Temperaturas:")
@@ -98,6 +95,7 @@ if __name__ == "__main__":
                print(f"IP: {result['ip']}")
                print("NO DISPONIBLE")
                print()
+               error += 1
                unavailable += 1
          print(f"Total de miners: {total}")
          print(f"Miners fallando: {error} ({round((error/total)*100, 2)}%)")
