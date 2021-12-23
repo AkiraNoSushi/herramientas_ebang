@@ -72,6 +72,7 @@ if __name__ == "__main__":
          total = int(end_ip)-int(start_ip)+1
          error = 0
          unavailable = 0
+         broken_fans = 0
          farm_temps = []
          for result in pool.imap(worker, range(int(start_ip), int(end_ip)+1)):
             if result["available"]:
@@ -87,6 +88,8 @@ if __name__ == "__main__":
                      print(f"├ {'└' if len(result['hashboards_temp'])==index+1 else '├'} Board {index+1}: {temps} (ºC)")
                   print(f"└ Ventiladores:")
                   for index, rpm in enumerate(result["fans_speed"]):
+                     if rpm < rpm_threshold:
+                        broken_fans += 1
                      print(f"  {'└' if len(result['fans_speed'])==index+1 else '├'} Ventilador {index+1}: {rpm} RPM")
                   print()
                   error += 1
@@ -99,6 +102,7 @@ if __name__ == "__main__":
          print(f"Total de miners: {total}")
          print(f"Miners fallando: {error} ({round((error/total)*100, 2)}%)")
          print(f"Miners no disponibles: {unavailable} ({round((unavailable/total)*100, 2)}%)")
+         print(f"Ventiladores defectuosos: {broken_fans}")
          print(f"Temperatura de la granja: {statistics.median(farm_temps)} ºC")
    except KeyboardInterrupt:
       pass
