@@ -21,7 +21,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 def worker(ip):
    try:
       ip = ipaddress.IPv4Address(ip)
-      result = ()
+      result = {}
       session = requests.Session()
       session.verify = False
       session.timeout = connection_timeout
@@ -33,10 +33,17 @@ def worker(ip):
             "login": "Login",
             "get_password": ""
          })
+      except requests.ReadTimeout:
+         result = {
+            "ip": ip,
+            "available": False,
+            "reason": 1
+         }
       except requests.RequestException:
          result = {
             "ip": ip,
-            "available": False
+            "available": False,
+            "reason": 0
          }
       else:
          operation_info = json.loads(session.post(f"https://{ip}/alarm/GetAlarmLoop").text)
@@ -94,11 +101,16 @@ if __name__ == "__main__":
                total_hashrate += result["hashrate"]
                farm_temps.append(result["median_temp"])
             else:
-               print(f"IP: {result['ip']}")
-               print("NO DISPONIBLE")
-               print()
-               error += 1
-               unavailable += 1
+               if result["reason"] == 0:
+                  print(f"IP: {result['ip']}")
+                  print("NO DISPONIBLE")
+                  print()
+                  error += 1
+                  unavailable += 1
+               elif result["reason"] == 1:
+                  print(f"IP: {result['ip']}")
+                  print("INICIANDOSE")
+                  print()
          print(f"Total de miners: {total}")
          print(f"Hashrate total: {round(total_hashrate/1000, 2)} TH/s")
          print(f"Temperatura de la granja: {statistics.median(farm_temps)} ºC")
