@@ -12,7 +12,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 def worker(ip):
    try:
       ip = ipaddress.IPv4Address(ip)
-      result = ()
       session = requests.Session()
       session.verify = False
       session.timeout = 5
@@ -25,24 +24,34 @@ def worker(ip):
             "get_password": ""
          })
       except requests.RequestException:
-         result = (False, ip)
+         return (False, ip)
       else:
          pool_user = f"{sys.argv[5]}.{str(ip)[str(ip).rindex('.')+1:].zfill(3)}"
          desired_ports = sys.argv[4].split(",")
-         session.post(f"https://{ip}/Cgminer/CgminerConfig", data={
-            "mip1": f"stratum+tcp://{sys.argv[3]}:{desired_ports[0]}",
-            "mwork1": pool_user,
-            "mpassword1": "",
-            "mip2": f"stratum+tcp://{sys.argv[3]}:{desired_ports[1]}",
-            "mwork2": pool_user,
-            "mpassword2": "",
-            "mip3": f"stratum+tcp://{sys.argv[3]}:{desired_ports[2]}",
-            "mwork3": pool_user,
-            "mpassword3": ""
-         })
-         threading.Thread(target=session.post, args=(f"https://{ip}/update/resetcgminer",)).start() # reboot async
-         result = (True, ip)
-      return result
+         pool_addrs = [f"stratum+tcp://{sys.argv[3]}:{port}" for port in desired_ports]
+         current_config = json.loads(session.get(f"https://{ip}/Cgminer/CgminerGetVal").text)
+         if any([
+            current_config["feedback"]["Mip1"] != pool_addrs[0],
+            current_config["feedback"]["Mip2"] != pool_addrs[1],
+            current_config["feedback"]["Mip3"] != pool_addrs[2],
+            current_config["feedback"]["Mwork1"] != pool_user,
+            current_config["feedback"]["Mwork2"] != pool_user,
+            current_config["feedback"]["Mwork3"] != pool_user,
+         ]):
+            session.post(f"https://{ip}/Cgminer/CgminerConfig", data={
+               "mip1": pool_addrs[0],
+               "mwork1": pool_user,
+               "mpassword1": "",
+               "mip2": pool_addrs[1],
+               "mwork2": pool_user,
+               "mpassword2": "",
+               "mip3": pool_addrs[2],
+               "mwork3": pool_user,
+               "mpassword3": ""
+            })
+            threading.Thread(target=session.post, args=(f"https://{ip}/update/resetcgminer",)).start() # reboot async
+            return (True, ip, True)
+         return (True, ip, False)
    except KeyboardInterrupt:
       pass
 
@@ -56,11 +65,16 @@ if __name__ == "__main__":
          total = int(end_ip)-int(start_ip)+1
          unavailable = 0
          for result in pool.imap(worker, range(int(start_ip), int(end_ip)+1)):
-            if not result[0]:
-               if unavailable == 0:
-                  print("MINERS NO DISPONIBLES:")
-               print(f"{result[1]}")
+            if result[0]:
+               if result[2]:
+                  print(f"IP: {result[1]}")
+                  print("POOL CAMBIADA")
+                  print()
+            else:
+               print(f"IP: {result[1]}")
+               print("NO DISPONIBLE")
                unavailable += 1
+               print()
          print()
          print(f"Total de miners: {total}")
          print(f"Miners no disponibles: {unavailable} ({round((unavailable/total)*100, 2)}%)")
